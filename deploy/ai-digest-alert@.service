@@ -1,0 +1,15 @@
+[Unit]
+Description=Резервный алерт об аварийном завершении ai-digest@%i.service
+
+[Service]
+Type=oneshot
+User=digest
+Group=digest
+WorkingDirectory=/opt/ai-digest
+EnvironmentFile=/opt/ai-digest/.env
+# Срабатывает через OnFailure= в ai-digest@.service — то есть когда сам процесс
+# не смог отправить алерт через notify.ts (упал до инициализации, убит по таймауту systemd и т.п.).
+# Поэтому шлём напрямую через curl, не полагаясь на код приложения.
+ExecStart=/bin/bash -c 'curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+  --data-urlencode "text=⚠️ ai-digest@%i.service завершился аварийно (systemd OnFailure). Смотрите: journalctl -u ai-digest@%i.service -n 50"'

@@ -1,0 +1,25 @@
+defaults:
+  lookback_hours: 24
+  max_items: 8
+  max_articles_to_fetch: 15
+  language: ru
+  model: claude-sonnet-4-5
+
+topics:
+  - id: ai-industry
+    title: "Новинки AI-индустрии"
+    feeds:
+      - https://www.anthropic.com/news/rss.xml
+      - https://openai.com/blog/rss.xml
+      - https://blog.google/technology/ai/rss/
+      - https://huggingface.co/blog/feed.xml
+      - https://hnrss.org/newest?q=AI+OR+LLM&points=100
+      - http://export.arxiv.org/rss/cs.AI
+    search_queries:
+      - "AI model release"
+      - "LLM agent framework launch"
+    exclude_keywords: ["stock price", "ETF"]
+    relevance_prompt: >
+      Важно: релизы моделей, инструменты для разработчиков, агентные фреймворки, MCP,
+      практические техники промптинга. Не важно: инвестраунды, кадровые перестановки,
+      общие рассуждения о будущем AI, хайп без технической сути.

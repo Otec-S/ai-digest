@@ -1,0 +1,11 @@
+[Unit]
+Description=Таймер запуска ai-digest для темы "%i"
+
+[Timer]
+# Раз в день в 07:00
+OnCalendar=*-*-* 07:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

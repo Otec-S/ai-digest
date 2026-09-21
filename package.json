@@ -1,0 +1,42 @@
+{
+  "name": "ai-digest",
+  "version": "0.1.0",
+  "description": "CLI-сервис для сбора дайджестов по темам из RSS/поиска с суммаризацией через Claude Agent SDK и отправкой в Telegram",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "ai-digest": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "better-sqlite3": "^11.3.0",
+    "commander": "^12.1.0",
+    "jsdom": "^25.0.1",
+    "@mozilla/readability": "^0.5.0",
+    "pino": "^9.4.0",
+    "rss-parser": "^3.13.0",
+    "turndown": "^7.2.0",
+    "yaml": "^2.5.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.7.4",
+    "@types/turndown": "^5.0.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

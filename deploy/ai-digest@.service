@@ -1,0 +1,20 @@
+[Unit]
+Description=ai-digest: сбор и отправка дайджеста по теме "%i"
+After=network-online.target
+Wants=network-online.target
+OnFailure=ai-digest-alert@%i.service
+
+[Service]
+Type=oneshot
+User=digest
+Group=digest
+WorkingDirectory=/opt/ai-digest
+EnvironmentFile=/opt/ai-digest/.env
+ExecStart=/usr/bin/node /opt/ai-digest/dist/index.js run --topic=%i
+TimeoutStartSec=600
+
+# Небольшое ужесточение окружения — сервис не должен писать за пределы своей рабочей директории
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ai-digest/data /opt/ai-digest/reports
