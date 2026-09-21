@@ -9,7 +9,8 @@ topics:
   - id: ai-industry
     title: "Новинки AI-индустрии"
     feeds:
-      - https://www.anthropic.com/news/rss.xml
+      # У Anthropic нет официального RSS — используем Google News по site:anthropic.com
+      - https://news.google.com/rss/search?q=site:anthropic.com&hl=en-US&gl=US&ceid=US:en
       - https://openai.com/blog/rss.xml
       - https://blog.google/technology/ai/rss/
       - https://huggingface.co/blog/feed.xml
