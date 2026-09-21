@@ -2,8 +2,10 @@
 Description=Таймер запуска ai-digest для темы "%i"
 
 [Timer]
-# Раз в день в 07:00
-OnCalendar=*-*-* 07:00:00
+# Раз в день в 07:00 по Asia/Tashkent (UTC+5). Таймер использует системную таймзону сервера,
+# поэтому время указано с поправкой под неё — проверьте `timedatectl` и пересчитайте при переносе
+# на сервер с другой таймзоной (05:00 = Europe/Moscow, UTC+3).
+OnCalendar=*-*-* 05:00:00
 RandomizedDelaySec=300
 Persistent=true
 

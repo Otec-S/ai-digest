@@ -10,6 +10,9 @@ User=digest
 Group=digest
 WorkingDirectory=/opt/ai-digest
 EnvironmentFile=/opt/ai-digest/.env
+# ReadWritePaths ниже требует, чтобы директории существовали ДО старта (иначе ProtectSystem=strict
+# не даст их примонтировать) — создаём их сами на каждый запуск, mkdir -p безопасен для повторного вызова.
+ExecStartPre=/bin/mkdir -p /opt/ai-digest/data /opt/ai-digest/reports
 ExecStart=/usr/bin/node /opt/ai-digest/dist/index.js run --topic=%i
 TimeoutStartSec=600
 
