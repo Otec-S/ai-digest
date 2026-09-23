@@ -4,7 +4,7 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY обязателен"),
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_CHAT_ID: z.string().min(1).optional(),
-  BRAVE_API_KEY: z.string().optional(),
+  TAVILY_API_KEY: z.string().optional(),
   DB_PATH: z.string().default("./data/digest.db"),
   LOG_LEVEL: z.string().default("info"),
 });

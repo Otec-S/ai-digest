@@ -53,7 +53,7 @@ async function run(options: RunOptions): Promise<void> {
 
   logger.info({ topic: topic.id, since: new Date(sinceMs).toISOString() }, "Начинаю сбор кандидатов");
 
-  const rawCandidates = await collectCandidates(topic, sinceMs);
+  const rawCandidates = await collectCandidates(topic, sinceMs, env.TAVILY_API_KEY);
   const db = openDatabase(env.DB_PATH);
   const now = new Date();
   const runId = options.dryRun ? null : startRun(db, { topicId: topic.id, startedAt: now.toISOString() });

@@ -41,7 +41,7 @@ sudo chmod 600 /opt/ai-digest/.env
 ```
 
 Обязательные переменные: `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-`BRAVE_API_KEY` — опционально (без него шаг добора через поиск пропускается).
+`TAVILY_API_KEY` — опционально (без него шаг добора через поиск пропускается).
 
 ## 5. Часовой пояс
 

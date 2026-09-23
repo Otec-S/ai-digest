@@ -1,5 +1,7 @@
 import type { TopicConfig } from "../config.js";
+import { logger } from "../logger.js";
 import { collectFromFeeds } from "./rss.js";
+import { collectFromSearch, TavilyProvider } from "./search.js";
 import { fetchArticleText } from "./fetchArticle.js";
 import type { Candidate } from "./types.js";
 
@@ -16,11 +18,27 @@ function matchesExcludeKeywords(candidate: Candidate, excludeKeywords: string[])
   return excludeKeywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
-/** Собирает кандидатов из RSS для темы, фильтрует по свежести и exclude_keywords. */
-export async function collectCandidates(topic: TopicConfig, sinceMs: number): Promise<Candidate[]> {
+/** Собирает кандидатов из RSS и (если задан ключ и есть search_queries) поиска, фильтрует по свежести и exclude_keywords. */
+export async function collectCandidates(
+  topic: TopicConfig,
+  sinceMs: number,
+  tavilyApiKey?: string,
+): Promise<Candidate[]> {
   const fromFeeds = await collectFromFeeds(topic.feeds);
 
-  return fromFeeds.filter(
+  let fromSearch: Candidate[] = [];
+  if (topic.search_queries.length > 0) {
+    if (tavilyApiKey) {
+      fromSearch = await collectFromSearch(new TavilyProvider(tavilyApiKey), topic.search_queries);
+    } else {
+      logger.warn(
+        { topic: topic.id },
+        "В теме заданы search_queries, но TAVILY_API_KEY не задан — шаг поиска пропущен",
+      );
+    }
+  }
+
+  return [...fromFeeds, ...fromSearch].filter(
     (candidate) => isRecent(candidate, sinceMs) && !matchesExcludeKeywords(candidate, topic.exclude_keywords),
   );
 }
