@@ -3,7 +3,7 @@ defaults:
   max_items: 8
   max_articles_to_fetch: 15
   language: ru
-  model: claude-sonnet-4-5
+  model: claude-sonnet-5
 
 topics:
   - id: ai-industry
