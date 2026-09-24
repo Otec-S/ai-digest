@@ -3,10 +3,14 @@ import type { TopicConfig } from "./config.js";
 
 const DOMAIN_WEIGHTS: Record<string, number> = {
   "anthropic.com": 1.5,
+  // Новости Anthropic приходят через Google News (своего RSS нет), ссылки ведут на news.google.com.
+  "news.google.com": 1.5,
   "openai.com": 1.5,
   "blog.google": 1.3,
   "huggingface.co": 1.3,
-  "arxiv.org": 1.2,
+  // Фид cs.AI даёт сотни статей в день с длинными абстрактами, богатыми ключевыми словами, —
+  // без понижения он вытесняет новости индустрии из топа на отбор.
+  "arxiv.org": 0.4,
   "news.ycombinator.com": 0.8,
 };
 
@@ -55,7 +59,8 @@ function keywordMatchScore(candidate: Candidate, keywords: string[]): number {
 }
 
 export function scoreCandidate(candidate: Candidate, keywords: string[], now: number): number {
-  return freshnessScore(candidate.publishedAt, now) * domainWeight(candidate.url) + keywordMatchScore(candidate, keywords);
+  // Вес домена умножает весь скор, иначе совпадения ключевых слов его обходят.
+  return (freshnessScore(candidate.publishedAt, now) + keywordMatchScore(candidate, keywords)) * domainWeight(candidate.url);
 }
 
 /** Эвристически ранжирует кандидатов и возвращает топ `topic.max_candidates_to_filter` для предварительного отбора. */

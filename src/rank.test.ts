@@ -46,4 +46,13 @@ describe("rankCandidates", () => {
     expect(ranked).toHaveLength(2);
     expect(ranked[0]?.title).toBe("New agent framework released");
   });
+
+  it("опускает arXiv ниже обычного источника даже при совпадении ключевых слов", () => {
+    const ranked = rankCandidates(
+      [candidate("LLM agent framework paper", "https://arxiv.org/abs/1"), candidate("Agent news", "https://example.com/n")],
+      baseTopic,
+      now,
+    );
+    expect(ranked[0]?.url).toBe("https://example.com/n");
+  });
 });
