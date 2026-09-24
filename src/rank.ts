@@ -34,23 +34,36 @@ function domainWeight(url: string): number {
   }
 }
 
+const MIN_KEYWORD_LENGTH = 3;
+
+/**
+ * Ключевые слова для ранжирования: явный `keywords` из конфига, иначе отдельные слова из
+ * `search_queries`. Целые фразы запросов («LLM agent framework launch») почти никогда не
+ * встречаются в заголовках дословно, поэтому матчить их как подстроку бесполезно.
+ */
+export function rankingKeywords(topic: TopicConfig): string[] {
+  const source = topic.keywords.length > 0 ? topic.keywords : topic.search_queries.flatMap((q) => q.split(/\s+/));
+  const words = source.map((w) => w.trim().toLowerCase()).filter((w) => w.length >= MIN_KEYWORD_LENGTH);
+  return [...new Set(words)];
+}
+
 function keywordMatchScore(candidate: Candidate, keywords: string[]): number {
   if (keywords.length === 0) return 0;
   const haystack = `${candidate.title} ${candidate.snippet}`.toLowerCase();
-  const matches = keywords.filter((kw) => haystack.includes(kw.toLowerCase())).length;
+  const matches = keywords.filter((kw) => haystack.includes(kw)).length;
   return matches * KEYWORD_MATCH_SCORE;
 }
 
-export function scoreCandidate(candidate: Candidate, topic: TopicConfig, now: number): number {
-  return (
-    freshnessScore(candidate.publishedAt, now) * domainWeight(candidate.url) +
-    keywordMatchScore(candidate, topic.search_queries)
-  );
+export function scoreCandidate(candidate: Candidate, keywords: string[], now: number): number {
+  return freshnessScore(candidate.publishedAt, now) * domainWeight(candidate.url) + keywordMatchScore(candidate, keywords);
 }
 
-/** Эвристически ранжирует кандидатов и возвращает топ `topic.max_articles_to_fetch`. */
+/** Эвристически ранжирует кандидатов и возвращает топ `topic.max_candidates_to_filter` для предварительного отбора. */
 export function rankCandidates(candidates: Candidate[], topic: TopicConfig, now = Date.now()): Candidate[] {
-  return [...candidates]
-    .sort((a, b) => scoreCandidate(b, topic, now) - scoreCandidate(a, topic, now))
-    .slice(0, topic.max_articles_to_fetch);
+  const keywords = rankingKeywords(topic);
+  return candidates
+    .map((candidate) => ({ candidate, score: scoreCandidate(candidate, keywords, now) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topic.max_candidates_to_filter)
+    .map(({ candidate }) => candidate);
 }

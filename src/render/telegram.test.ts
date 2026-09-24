@@ -8,13 +8,16 @@ const topic: TopicConfig = {
   title: "Новинки AI-индустрии",
   feeds: [],
   search_queries: [],
+  keywords: [],
   exclude_keywords: [],
   relevance_prompt: "test",
   lookback_hours: 24,
   max_items: 8,
   max_articles_to_fetch: 15,
   language: "ru",
-  model: "claude-sonnet-4-5",
+  model: "claude-sonnet-5",
+  filter_model: "claude-haiku-4-5",
+  max_candidates_to_filter: 40,
 };
 
 function makeItem(overrides: Partial<DigestResult["items"][number]> = {}): DigestResult["items"][number] {

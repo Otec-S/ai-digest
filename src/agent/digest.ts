@@ -1,97 +1,104 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { TopicConfig } from "../config.js";
 import type { Candidate } from "../collect/types.js";
 import { logger } from "../logger.js";
-import { buildArticlesPrompt, buildSystemPrompt } from "./prompt.js";
-import { DigestResult, digestResultJsonSchema, type DigestResult as DigestResultType } from "./schema.js";
+import { callStructured, hasKnownPrice, type Usage } from "./client.js";
+import { buildArticlesPrompt, buildFilterPrompt, buildFilterSystemPrompt, buildSystemPrompt } from "./prompt.js";
+import {
+  AgentDigestResult,
+  agentDigestResultJsonSchema,
+  FilterResult,
+  filterResultJsonSchema,
+  type DigestItem,
+  type DigestResult,
+} from "./schema.js";
 
-export interface DigestUsage {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
+export type { Usage as DigestUsage } from "./client.js";
 
 export interface DigestOutcome {
-  result: DigestResultType;
-  usage: DigestUsage;
+  result: DigestResult;
+  usage: Usage;
 }
 
-const emptyUsage = (): DigestUsage => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+const FILTER_MAX_TOKENS = 1_000;
+const DIGEST_MAX_TOKENS = 8_000;
+const MAX_TAGS = 4;
 
-function addUsage(a: DigestUsage, b: DigestUsage): DigestUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    costUsd: a.costUsd + b.costUsd,
-  };
+function warnUnknownPrice(model: string): void {
+  if (!hasKnownPrice(model)) {
+    logger.warn({ model }, "Нет цены для модели — стоимость в отчёте будет 0");
+  }
 }
 
-interface AttemptResult {
-  structuredOutput: unknown;
-  usage: DigestUsage;
+/** Возвращает элемент по 1-based номеру из ответа модели или null, если номер вне диапазона. */
+function pickByIndex<T>(items: T[], index: number): T | null {
+  return index >= 1 && index <= items.length ? (items[index - 1] ?? null) : null;
 }
 
-/** Один вызов агента: прогоняет query() до конца и вытаскивает structured_output и метрики токенов/стоимости. */
-async function runAgentOnce(systemPrompt: string, userPrompt: string, model: string): Promise<AttemptResult> {
-  const stream = query({
-    prompt: userPrompt,
-    options: {
-      model,
-      systemPrompt,
-      tools: [],
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      outputFormat: { type: "json_schema", schema: digestResultJsonSchema },
-    },
+/**
+ * Предварительный отбор дешёвой моделью по заголовкам и сниппетам: полные тексты скачиваются
+ * и отправляются основной модели только для отобранных статей.
+ */
+export async function filterCandidates(
+  topic: TopicConfig,
+  candidates: Candidate[],
+): Promise<{ selected: Candidate[]; usage: Usage }> {
+  const maxRelevant = topic.max_articles_to_fetch;
+  warnUnknownPrice(topic.filter_model);
+
+  const { data, usage } = await callStructured({
+    model: topic.filter_model,
+    system: buildFilterSystemPrompt(topic, maxRelevant),
+    user: buildFilterPrompt(candidates),
+    jsonSchema: filterResultJsonSchema,
+    zodSchema: FilterResult,
+    maxTokens: FILTER_MAX_TOKENS,
   });
 
-  for await (const message of stream) {
-    if (message.type === "result") {
-      if (message.subtype !== "success") {
-        throw new Error(`Агент завершился с ошибкой (${message.subtype}): ${message.errors.join("; ")}`);
-      }
-      return {
-        structuredOutput: message.structured_output,
-        usage: {
-          inputTokens: message.usage.input_tokens ?? 0,
-          outputTokens: message.usage.output_tokens ?? 0,
-          costUsd: message.total_cost_usd,
-        },
-      };
-    }
-  }
+  const selected = [...new Set(data.relevant)]
+    .map((index) => pickByIndex(candidates, index))
+    .filter((candidate): candidate is Candidate => candidate !== null)
+    .slice(0, maxRelevant);
 
-  throw new Error("Агент завершился без result-сообщения");
+  return { selected, usage };
 }
 
-const MAX_ATTEMPTS = 2;
-
-/** Вызывает Claude Agent SDK для составления дайджеста, с одной повторной попыткой при невалидном JSON. */
+/** Составляет дайджест основной моделью; url/source/published_at берутся из кандидатов по номеру статьи. */
 export async function generateDigest(topic: TopicConfig, candidates: Candidate[]): Promise<DigestOutcome> {
-  const systemPrompt = buildSystemPrompt(topic);
-  let userPrompt = buildArticlesPrompt(candidates);
-  let usage = emptyUsage();
+  warnUnknownPrice(topic.model);
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const { structuredOutput, usage: attemptUsage } = await runAgentOnce(systemPrompt, userPrompt, topic.model);
-    usage = addUsage(usage, attemptUsage);
+  const { data, usage } = await callStructured({
+    model: topic.model,
+    system: buildSystemPrompt(topic),
+    user: buildArticlesPrompt(candidates),
+    jsonSchema: agentDigestResultJsonSchema,
+    zodSchema: AgentDigestResult,
+    maxTokens: DIGEST_MAX_TOKENS,
+    // Суммаризация — несложная задача: низкий effort заметно сокращает токены размышлений.
+    effort: "low",
+  });
 
-    const parsed = DigestResult.safeParse(structuredOutput);
-    if (parsed.success) {
-      return { result: parsed.data, usage };
+  const items: DigestItem[] = [];
+  for (const item of data.items) {
+    const candidate = pickByIndex(candidates, item.article_index);
+    if (!candidate) {
+      logger.warn({ articleIndex: item.article_index }, "Агент вернул несуществующий номер статьи — пункт пропущен");
+      continue;
     }
-
-    logger.warn(
-      { attempt, error: parsed.error.message },
-      "Ответ агента не прошёл zod-валидацию",
-    );
-
-    if (attempt === MAX_ATTEMPTS) {
-      throw new Error(`Ответ агента не прошёл валидацию после ${MAX_ATTEMPTS} попыток: ${parsed.error.message}`);
-    }
-
-    userPrompt = `${userPrompt}\n\n---\nТвой предыдущий ответ не прошёл валидацию по схеме. Ошибка: ${parsed.error.message}\nИсправь ответ, строго соблюдая структуру схемы.`;
+    items.push({
+      title: item.title,
+      summary: item.summary,
+      why_it_matters: item.why_it_matters,
+      url: candidate.url,
+      source: candidate.source,
+      published_at: candidate.publishedAt ?? "неизвестно",
+      importance: item.importance,
+      tags: item.tags.slice(0, MAX_TAGS),
+    });
   }
 
-  throw new Error("Недостижимая ветка: цикл попыток завершился без результата");
+  return {
+    // Модель не всегда соблюдает порядок из промпта — сортируем по важности сами (sort стабилен).
+    result: { items: items.sort((a, b) => b.importance - a.importance).slice(0, topic.max_items), nothing_new: items.length === 0 || data.nothing_new },
+    usage,
+  };
 }

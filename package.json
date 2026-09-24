@@ -1,7 +1,7 @@
 {
   "name": "ai-digest",
   "version": "0.1.0",
-  "description": "CLI-сервис для сбора дайджестов по темам из RSS/поиска с суммаризацией через Claude Agent SDK и отправкой в Telegram",
+  "description": "CLI-сервис для сбора дайджестов по темам из RSS/поиска с суммаризацией через Claude API и отправкой в Telegram",
   "type": "module",
   "private": true,
   "bin": {
@@ -19,11 +19,11 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@mozilla/readability": "^0.5.0",
     "better-sqlite3": "^11.3.0",
     "commander": "^12.1.0",
     "jsdom": "^25.0.1",
-    "@mozilla/readability": "^0.5.0",
     "pino": "^9.4.0",
     "rss-parser": "^3.13.0",
     "turndown": "^7.2.0",

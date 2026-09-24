@@ -28,8 +28,20 @@ Search API) — выбрана вместо Brave, у которого нет б
   Telegram-сообщения (`formatDigestMessages`) уронила боевую отправку с `400 Bad Request`. Тесты
   ловят это плохо, если проверяют `toContain` без явного `not.toContain` на неэкранированный вариант —
   см. `render/telegram.test.ts`.
-- **zod v3 не умеет сама генерировать JSON Schema.** `agent/schema.ts` держит `digestResultJsonSchema`
-  руками синхронно с `DigestResult` — при правке одного не забудьте другое.
+- **zod v3 не умеет сама генерировать JSON Schema.** `agent/schema.ts` держит `agentDigestResultJsonSchema`
+  и `filterResultJsonSchema` руками синхронно с zod-схемами — при правке одного не забудьте другое.
+
+## Экономия токенов (не откатывать без причины)
+
+- Двухэтапный вызов: `filter_model` (Haiku) отбирает по заголовкам/сниппетам, полный текст качается и
+  уходит в `model` только для отобранных. `markCandidatesSeen` помечает лишь `ranked` (то, что видела
+  модель), а не весь `deduped` — иначе кандидаты за пределами топа терялись навсегда.
+- Модель возвращает `article_index`, а url/source/published_at подставляются в коде — меньше выходных
+  токенов и нет выдуманных URL. Повторов при невалидном ответе нет (retry удваивал расход).
+- `MAX_CONTENT_CHARS = 4000` + `compactMarkdown` в `fetchArticle.ts`; `effort: "low"` на суммаризации.
+- Используется Messages API (`@anthropic-ai/sdk`), а не Agent SDK: однократный вызов без инструментов.
+  Цены для расчёта `costUsd` — таблица в `agent/client.ts`, обновлять при смене моделей.
+- `--no-agent` — прогон сбора/ранжирования без вызова модели.
 
 ## Деплой (сервер общий, не выделенный)
 

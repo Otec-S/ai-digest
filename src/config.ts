@@ -10,6 +10,10 @@ const topicDefaultsSchema = z.object({
   max_articles_to_fetch: z.number().int().positive(),
   language: z.string().min(2),
   model: z.string().min(1),
+  /** Дешёвая модель для предварительного отбора по заголовкам/сниппетам. */
+  filter_model: z.string().min(1).default("claude-haiku-4-5"),
+  /** Сколько кандидатов после эвристического ранжирования отдаётся на предварительный отбор. */
+  max_candidates_to_filter: z.number().int().positive().default(40),
 });
 
 const topicOverridesSchema = topicDefaultsSchema.partial().extend({
@@ -17,6 +21,7 @@ const topicOverridesSchema = topicDefaultsSchema.partial().extend({
   title: z.string().min(1),
   feeds: z.array(z.string().url()).default([]),
   search_queries: z.array(z.string()).default([]),
+  keywords: z.array(z.string()).default([]),
   exclude_keywords: z.array(z.string()).default([]),
   relevance_prompt: z.string().min(1),
 });
@@ -31,6 +36,7 @@ export type TopicConfig = z.infer<typeof topicDefaultsSchema> & {
   title: string;
   feeds: string[];
   search_queries: string[];
+  keywords: string[];
   exclude_keywords: string[];
   relevance_prompt: string;
 };
@@ -56,6 +62,7 @@ export function loadConfig(path: string): AppConfig {
       title: topic.title,
       feeds: topic.feeds,
       search_queries: topic.search_queries,
+      keywords: topic.keywords,
       exclude_keywords: topic.exclude_keywords,
       relevance_prompt: topic.relevance_prompt,
       lookback_hours: topic.lookback_hours ?? parsed.defaults.lookback_hours,
@@ -63,6 +70,8 @@ export function loadConfig(path: string): AppConfig {
       max_articles_to_fetch: topic.max_articles_to_fetch ?? parsed.defaults.max_articles_to_fetch,
       language: topic.language ?? parsed.defaults.language,
       model: topic.model ?? parsed.defaults.model,
+      filter_model: topic.filter_model ?? parsed.defaults.filter_model,
+      max_candidates_to_filter: topic.max_candidates_to_filter ?? parsed.defaults.max_candidates_to_filter,
     };
   });
 

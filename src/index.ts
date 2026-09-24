@@ -5,7 +5,11 @@ import { collectCandidates, enrichWithFullText } from "./collect/index.js";
 import { finishRun, insertItem, openDatabase, startRun } from "./db.js";
 import { dedupeCandidates, markCandidatesSeen } from "./dedupe.js";
 import { rankCandidates } from "./rank.js";
-import { generateDigest } from "./agent/digest.js";
+import { filterCandidates, generateDigest } from "./agent/digest.js";
+import { addUsage, emptyUsage } from "./agent/client.js";
+import { buildFilterPrompt } from "./agent/prompt.js";
+import type { DigestResult } from "./agent/schema.js";
+import type { Candidate } from "./collect/types.js";
 import { loadEnv, requireTelegramConfig } from "./env.js";
 import { renderMarkdownReport, reportPath, writeMarkdownReport } from "./render/markdown.js";
 import { formatDigestMessages, sendDigest } from "./render/telegram.js";
@@ -37,9 +41,16 @@ function withHardTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
+/** Грубая оценка токенов без обращения к API (~4 символа на токен для смеси латиницы/кириллицы). */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
 interface RunOptions {
   topic: string;
   dryRun?: boolean;
+  /** false при --no-agent. */
+  agent: boolean;
   since?: string;
   config: string;
 }
@@ -56,7 +67,7 @@ async function run(options: RunOptions): Promise<void> {
   const rawCandidates = await collectCandidates(topic, sinceMs, env.TAVILY_API_KEY);
   const db = openDatabase(env.DB_PATH);
   const now = new Date();
-  const runId = options.dryRun ? null : startRun(db, { topicId: topic.id, startedAt: now.toISOString() });
+  const runId = options.dryRun || !options.agent ? null : startRun(db, { topicId: topic.id, startedAt: now.toISOString() });
 
   try {
     await runPipeline(options, topic, env, db, runId, rawCandidates, now);
@@ -90,10 +101,35 @@ async function runPipeline(
     "Кандидаты отфильтрованы и отранжированы",
   );
 
-  const enriched = await enrichWithFullText(ranked);
+  if (!options.agent) {
+    const filterPrompt = buildFilterPrompt(ranked);
+    console.log(`\nТема: ${topic.title} (${topic.id}) — режим без вызова модели`);
+    console.log(`Сырых кандидатов: ${rawCandidates.length}, после дедупа: ${deduped.length}, на отбор: ${ranked.length}`);
+    console.log(`Промпт отбора (${topic.filter_model}): ~${estimateTokens(filterPrompt)} токенов\n`);
+    console.log(filterPrompt);
+    db.close();
+    return;
+  }
 
-  logger.info({ count: enriched.length }, "Вызываю агента для составления дайджеста");
-  const { result: digest, usage } = await generateDigest(topic, enriched);
+  let usage = emptyUsage();
+  let selected: Candidate[] = [];
+  if (ranked.length > 0) {
+    const filtered = await filterCandidates(topic, ranked);
+    selected = filtered.selected;
+    usage = addUsage(usage, filtered.usage);
+    logger.info({ count: selected.length, costUsd: filtered.usage.costUsd }, "Предварительный отбор завершён");
+  }
+
+  let digest: DigestResult = { items: [], nothing_new: true };
+  if (selected.length > 0) {
+    const enriched = await enrichWithFullText(selected);
+    logger.info({ count: enriched.length }, "Вызываю агента для составления дайджеста");
+    const outcome = await generateDigest(topic, enriched);
+    digest = outcome.result;
+    usage = addUsage(usage, outcome.usage);
+  } else {
+    logger.info("Релевантных кандидатов нет — суммаризация пропущена");
+  }
   logger.info(
     { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd },
     "Агент отработал",
@@ -101,7 +137,9 @@ async function runPipeline(
 
   if (options.dryRun) {
     console.log(`\nТема: ${topic.title} (${topic.id})`);
-    console.log(`Сырых кандидатов: ${rawCandidates.length}, после дедупа: ${deduped.length}, в топ-отборе: ${ranked.length}`);
+    console.log(
+      `Сырых кандидатов: ${rawCandidates.length}, после дедупа: ${deduped.length}, на отбор: ${ranked.length}, отобрано: ${selected.length}`,
+    );
     console.log(
       `Токены: ${usage.inputTokens} вход / ${usage.outputTokens} выход, стоимость: $${usage.costUsd.toFixed(4)}\n`,
     );
@@ -144,7 +182,8 @@ async function runPipeline(
   await sendDigest(telegramConfig, messages);
   logger.info({ messages: messages.length }, "Дайджест отправлен в Telegram");
 
-  markCandidatesSeen(db, deduped, topic.id, now);
+  // Помечаем только то, что модель реально рассмотрела; остальные кандидаты остаются на следующий запуск.
+  markCandidatesSeen(db, ranked, topic.id, now);
   finishRun(db, runId as number, {
     status: digest.nothing_new || digest.items.length === 0 ? "no_news" : "ok",
     finishedAt: new Date().toISOString(),
@@ -161,10 +200,11 @@ const program = new Command();
 
 program
   .name("ai-digest")
-  .description("Сбор и суммаризация новостей по темам через Claude Agent SDK")
+  .description("Сбор и суммаризация новостей по темам через Claude API")
   .command("run")
   .requiredOption("--topic <id>", "id темы из config/topics.yaml")
   .option("--dry-run", "не писать в БД и не слать в Telegram, только вывести в консоль")
+  .option("--no-agent", "не вызывать модель: показать промпт отбора и его примерный размер (для отладки сбора/ранжирования)")
   .option("--since <window>", 'окно свежести, например "24h" или "7d" (переопределяет lookback_hours)')
   .option("--config <path>", "путь к конфигу тем", DEFAULT_CONFIG_PATH)
   .action(async (options: RunOptions) => {
