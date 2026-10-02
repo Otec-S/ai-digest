@@ -15,7 +15,7 @@ const topic: TopicConfig = {
   max_items: 8,
   max_articles_to_fetch: 15,
   language: "ru",
-  model: "claude-sonnet-5",
+  model: "claude-sonnet-5-5",
   filter_model: "claude-haiku-4-5",
   max_candidates_to_filter: 40,
 };
